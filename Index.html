@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>Interactive Team Bubble Chart</title>
+<style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(to bottom, black, #FF00FF);
+        overflow: hidden;
+        position: relative;
+        height: 100vh;
+    }
+    .bubble {
+        position: absolute;
+        border-radius: 50%;
+        width: 150px;
+        height: 150px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        text-align: center;
+        cursor: pointer;
+        overflow: hidden;
+        padding: 10px;
+        box-sizing: border-box;
+        animation: pulseGlow 2s infinite;
+        transition: transform 0.3s;
+        background-blend-mode: overlay;
+    }
+    .bubble:hover {
+        transform: scale(1.08);
+    }
+    .bubble img {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        margin-bottom: 5px;
+    }
+    .stars {
+        font-size: 14px;
+        margin-top: 2px;
+        color: gold;
+        animation: twinkle 1.5s infinite alternate;
+    }
+    .navigator {
+        background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), transparent 40%), 
+                    linear-gradient(to bottom right, purple, black);
+        color: white;
+        box-shadow: inset -5px -5px 15px rgba(255,255,255,0.2),
+                    inset 5px 5px 15px rgba(0,0,0,0.4),
+                    0 0 20px purple;
+    }
+    .explorer {
+        background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), transparent 40%), 
+                    linear-gradient(to bottom right, fuchsia, white);
+        color: black;
+        box-shadow: inset -5px -5px 15px rgba(255,255,255,0.2),
+                    inset 5px 5px 15px rgba(0,0,0,0.3),
+                    0 0 20px fuchsia;
+    }
+    @keyframes pulseGlow {
+        0% { box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        50% { box-shadow: 0 0 25px rgba(255,255,255,1); }
+        100% { box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+    }
+    @keyframes twinkle {
+        0% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    .modal, .edit-form {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: white;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 5px 25px rgba(0,0,0,0.4);
+        z-index: 1000;
+        width: 320px;
+    }
+    .overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: none;
+        z-index: 999;
+    }
+</style>
+
+<!-- Firebase SDK scripts -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+</head>
+<body>
+<div class='overlay' id='overlay' onclick='closeModal()'></div>
+<div class='modal' id='modal'>
+    <h2 id='modalName'></h2>
+    <p><strong>Position:</strong> <span id='modalPosition'></span></p>
+    <p><strong>Responsibilities:</strong> <span id='modalResponsibilities'></span></p>
+    <p><strong>Badge:</strong> <span id='modalBadge'></span></p>
+    <p><strong>AI Celebrations:</strong> <span id='modalCelebrations'></span></p>
+    <button onclick='editBubble()'>Edit</button>
+</div>
+<div class='edit-form' id='editForm'>
+    <h3>Edit Bubble Info</h3>
+    <input type='text' id='editName' placeholder='Name'><br><br>
+    <input type='text' id='editPosition' placeholder='Position'><br><br>
+    <input type='text' id='editResponsibilities' placeholder='Responsibilities'><br><br>
+    <input type='text' id='editBadge' placeholder='Badge'><br><br>
+    <input type='text' id='editImage' placeholder='Image URL'><br><br>
+    <textarea id='editCelebrations' placeholder='AI Celebrations (comma separated, max 50)' rows='3' style='width:100%'></textarea><br><br>
+    <button onclick='saveEdit()'>Save</button>
+</div>
+
+<script>
+// Firebase config
+const firebaseConfig = {
+    apiKey: "AIzaSyBqLMyY361SYEzAXxofprgFR8jKv09Ctvo",
+    authDomain: "team-jc-bubble-chart.firebaseapp.com",
+    databaseURL: "https://team-jc-bubble-chart-default-rtdb.firebaseio.com",
+    projectId: "team-jc-bubble-chart",
+    storageBucket: "team-jc-bubble-chart.firebasestorage.app",
+    messagingSenderId: "1091139231743",
+    appId: "1:1091139231743:web:d85e5d38d87c4c917dd1ca",
+    measurementId: "G-YYLQH0ZG5C"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Hardcoded teammates list
+let teammates = [
+    { name: "Paula", role: "navigator", position: "AI Navigator", responsibilities: "Customize your role", badge: "✅", image: "", celebrations: [] },
+    { name: "Robertson", role: "navigator", position: "AI Navigator", responsibilities: "Customize your role", badge: "✅", image: "", celebrations: [] },
+    { name: "Dean", role: "navigator", position: "AI Navigator", responsibilities: "Customize your role", badge: "✅", image: "", celebrations: [] },
+    { name: "Sarah", role: "navigator", position: "AI Navigator", responsibilities: "Customize your role", badge: "✅", image: "", celebrations: [] },
+    { name: "Nessa", role: "navigator", position: "AI Navigator", responsibilities: "Customize your role", badge: "✅", image: "", celebrations: [] },
+    { name: "Donabel", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Nicole", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Sharmaine", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Jao", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Jaica", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Acoi", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Mina", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Camille", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Jona", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Clarrise", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Rochele", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Deserie", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Valerie", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Nedessa", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] },
+    { name: "Hope", role: "explorer", position: "AI Explorer", responsibilities: "Customize your role", badge: "❓", image: "", celebrations: [] }
+];
+
+let currentBubble = null;
+
+// Auto-upload teammates if Firestore is empty
+db.collection("teammates").get().then(snapshot => {
+    if (snapshot.empty) {
+        console.log("Firestore empty — uploading default teammates...");
+        teammates.forEach(mate => {
+            db.collection("teammates").doc(mate.name).set(mate)
+              .then(() => console.log(`Added ${mate.name}`))
+              .catch(err => console.error("Error adding teammate:", err));
+        });
+    }
+});
+
+// Real-time listener
+db.collection("teammates").onSnapshot(snapshot => {
+    if (!snapshot.empty) {
+        teammates = [];
+        snapshot.forEach(doc => teammates.push(doc.data()));
+    }
+    createBubbles();
+}, err => {
+    console.error("Error loading from Firestore, using fallback:", err);
+    createBubbles();
+});
+
+function createBubbles() {
+    document.querySelectorAll('.bubble').forEach(b => b.remove());
+    teammates.forEach((mate, index) => {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble ' + mate.role;
+        let stars = "⭐".repeat(mate.celebrations.length);
+        bubble.innerHTML = `<img src='${mate.image || "https://via.placeholder.com/60"}'>
+                            <div>${mate.name}</div>
+                            <div class='stars'>${stars}</div>`;
+        bubble.style.top = Math.random() * (window.innerHeight - 150) + 'px';
+        bubble.style.left = Math.random() * (window.innerWidth - 150) + 'px';
+        document.body.appendChild(bubble);
+
+        let dx = (Math.random() - 0.5) * 2;
+        let dy = (Math.random() - 0.5) * 2;
+        let speed = Math.random() * 2 + 0.5;
+
+        function move() {
+            let rect = bubble.getBoundingClientRect();
+            let x = rect.left + dx * speed;
+            let y = rect.top + dy * speed;
+            if (x < 0 || x > window.innerWidth - 150) dx = -dx;
+            if (y < 0 || y > window.innerHeight - 150) dy = -dy;
+            bubble.style.left = Math.max(0, Math.min(window.innerWidth - 150, x)) + 'px';
+            bubble.style.top = Math.max(0, Math.min(window.innerHeight - 150, y)) + 'px';
+            requestAnimationFrame(move);
+        }
+        move();
+
+        bubble.onclick = () => {
+            currentBubble = index;
+            document.getElementById('modalName').innerText = mate.name;
+            document.getElementById('modalPosition').innerText = mate.position;
+            document.getElementById('modalResponsibilities').innerText = mate.responsibilities;
+            document.getElementById('modalBadge').innerText = mate.badge;
+            document.getElementById('modalCelebrations').innerText = mate.celebrations.join(", ");
+            document.getElementById('modal').style.display = 'block';
+            document.getElementById('overlay').style.display = 'block';
+        };
+    });
+}
+
+function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('editForm').style.display = 'none';
+}
+
+function editBubble() {
+    const mate = teammates[currentBubble];
+    document.getElementById('editName').value = mate.name;
+    document.getElementById('editPosition').value = mate.position;
+    document.getElementById('editResponsibilities').value = mate.responsibilities;
+    document.getElementById('editBadge').value = mate.badge;
+    document.getElementById('editImage').value = mate.image;
+    document.getElementById('editCelebrations').value = mate.celebrations.join(", ");
+    document.getElementById('editForm').style.display = 'block';
+}
+
+function saveEdit() {
+    const mate = teammates[currentBubble];
+    mate.name = document.getElementById('editName').value;
+    mate.position = document.getElementById('editPosition').value;
+    mate.responsibilities = document.getElementById('editResponsibilities').value;
+    mate.badge = document.getElementById('editBadge').value;
+    mate.image = document.getElementById('editImage').value;
+    let celebrationsArray = document.getElementById('editCelebrations').value.split(",").map(c => c.trim()).filter(c => c);
+    if (celebrationsArray.length > 50) celebrationsArray = celebrationsArray.slice(0, 50);
+    mate.celebrations = celebrationsArray;
+
+    db.collection("teammates").doc(mate.name).set(mate)
+       .then(() => {
+           console.log("Teammate updated in Firestore");
+           closeModal();
+       })
+       .catch(err => console.error("Error saving to Firestore:", err));
+}
+</script>
+</body>
+</html>
